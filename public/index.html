@@ -463,15 +463,24 @@
         }
 
         function downloadSelected() {
-            if (currentView === 'results' && currentFiles[selectedIndex]) {
-                triggerDownload(currentFiles[selectedIndex].path);
+            if (currentView !== 'results') return;
+            const f = currentFiles[selectedIndex];
+            if (!f) return;
+            downloadFile(f);
+        }
+
+        function downloadFile(f) {
+            if (f.type === 'cover' && f.cover_url) {
+                triggerDownload(f.cover_url, 'cover.jpg');
+            } else if (f.type === 'audio' && f.search) {
+                triggerDownload('/api/proxy?q=' + encodeURIComponent(f.search), f.name + '.m4a');
             }
         }
 
-        function triggerDownload(path) {
+        function triggerDownload(url, filename) {
             const a = document.createElement('a');
-            a.href = path;
-            a.download = '';
+            a.href = url;
+            a.download = filename || '';
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -499,13 +508,7 @@
                     <span class="ficon">${icon}</span>
                     <span class="ficon">${status}</span>
                 `;
-                div.onclick = () => {
-                    if (f.type === 'cover' && f.cover_url) {
-                        window.open(f.cover_url, '_blank');
-                    } else if (f.type === 'audio' && f.search) {
-                        window.open('/api/proxy?q=' + encodeURIComponent(f.search), '_blank');
-                    }
-                };
+                div.onclick = () => downloadFile(f);
                 list.appendChild(div);
             });
             updateDownloadAllBtn();
