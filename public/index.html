@@ -215,6 +215,24 @@
             margin-top: 2px;
         }
 
+        .download-all-btn {
+            width: 100%; padding: 6px;
+            background: var(--dark-green);
+            color: var(--mint);
+            border: none; border-radius: 4px;
+            font-family: inherit;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            margin-bottom: 6px;
+            transition: opacity 0.2s;
+        }
+        .download-all-btn:hover { opacity: 0.85; }
+        .download-all-btn:disabled {
+            opacity: 0.4; cursor: not-allowed;
+        }
+
         .file-list {
             flex: 1; overflow-y: auto;
         }
@@ -362,6 +380,9 @@
                             <div class="rm-count" id="rmCount"></div>
                         </div>
                     </div>
+                    <button class="download-all-btn" id="downloadAllBtn" onclick="downloadAll()" disabled>
+                        &#8681; Ladda ner alla
+                    </button>
                     <div class="file-list" id="fileList"></div>
                 </div>
             </div>
@@ -383,6 +404,7 @@
         <div class="branding">spotify hijack</div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script>
         const views = {
             input: document.getElementById('inputView'),
@@ -483,6 +505,61 @@
                 };
                 list.appendChild(div);
             });
+            updateDownloadAllBtn();
+        }
+
+        function updateDownloadAllBtn() {
+            const btn = document.getElementById('downloadAllBtn');
+            const readyCount = currentFiles.filter(f => f.status === 'ready').length;
+            const allReady = readyCount === currentFiles.length && readyCount > 0;
+            btn.disabled = !allReady;
+            btn.textContent = allReady
+                ? '\u2913 Ladda ner alla (' + readyCount + ')'
+                : '\u2913 Laddar... (' + readyCount + '/' + currentFiles.length + ')';
+        }
+
+        async function downloadAll() {
+            const btn = document.getElementById('downloadAllBtn');
+            btn.disabled = true;
+            btn.textContent = 'Packar ZIP...';
+
+            try {
+                const zip = new JSZip();
+                const folderName = (albumInfo.artist || 'Unknown') + ' - ' + (albumInfo.album || 'Unknown');
+                const folder = zip.folder(folderName);
+
+                const fetches = currentFiles.filter(f => f.status === 'ready').map(async (f) => {
+                    try {
+                        const url = f.audio_url || f.cover_url;
+                        if (!url) return;
+                        const res = await fetch(url);
+                        const blob = await res.blob();
+                        const ext = f.type === 'cover' ? '.jpg' : '';
+                        const name = f.type === 'cover' ? 'cover.jpg' : f.name + ext;
+                        folder.file(name, blob);
+                    } catch (e) {
+                        console.error('Failed to fetch:', f.name, e);
+                    }
+                });
+
+                await Promise.all(fetches);
+                const content = await zip.generateAsync({ type: 'blob' });
+
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(content);
+                a.download = folderName + '.zip';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(a.href);
+
+                btn.textContent = '\u2713 Klart!';
+                setTimeout(() => updateDownloadAllBtn(), 2000);
+            } catch (e) {
+                btn.textContent = 'Fel - forsok igen';
+                btn.disabled = false;
+                console.error('ZIP error:', e);
+            }
         }
 
         async function fetchYouTubeUrl(track, index) {
