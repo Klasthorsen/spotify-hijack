@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    { "source": "/api/info", "destination": "/api/info" },
+    { "source": "/api/youtube", "destination": "/api/youtube" }
+  ],
+  "functions": {
+    "api/info.py": {
+      "runtime": "@vercel/python",
+      "maxDuration": 30
+    },
+    "api/youtube.py": {
+      "runtime": "@vercel/python",
+      "maxDuration": 60
+    }
+  }
+}

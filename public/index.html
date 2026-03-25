@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Hijack</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --dark-green: #2D4A3E;
+            --sage: #C5D5C5;
+            --mint: #F0F5EC;
+            --black: #1A1A1A;
+            --charcoal: #2D2D2D;
+            --gray: #4A4A4A;
+            --gray-light: #5A5A5A;
+            --lavender: #B8B8D8;
+        }
+
+        body {
+            background: var(--black);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: "Helvetica Neue", "Chicago", monospace;
+            overflow: hidden;
+        }
+
+        .ipod {
+            width: 360px;
+            background: linear-gradient(180deg, #e8e8e8 0%, #d0d0d0 50%, #b8b8b8 100%);
+            border-radius: 32px;
+            padding: 24px 22px 28px;
+            box-shadow:
+                0 0 0 2px #999,
+                0 8px 40px rgba(0,0,0,0.6),
+                inset 0 1px 0 rgba(255,255,255,0.6);
+        }
+
+        .screen {
+            background: var(--mint);
+            border-radius: 8px;
+            border: 3px solid #555;
+            overflow: hidden;
+            margin-bottom: 24px;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .screen-header {
+            background: var(--dark-green);
+            color: var(--mint);
+            padding: 6px 12px;
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .battery-icon {
+            width: 18px; height: 9px;
+            border: 1.5px solid var(--mint);
+            border-radius: 2px;
+            position: relative;
+            display: inline-block;
+        }
+        .battery-icon::after {
+            content: ''; position: absolute;
+            right: -3px; top: 2px;
+            width: 2px; height: 4px;
+            background: var(--mint);
+            border-radius: 0 1px 1px 0;
+        }
+        .battery-fill {
+            height: 100%; width: 75%;
+            background: var(--mint);
+            border-radius: 1px;
+        }
+
+        .screen-content {
+            padding: 12px;
+            min-height: 260px;
+            max-height: 260px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .title-bar {
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--dark-green);
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1.5px solid var(--sage);
+        }
+
+        /* Views */
+        .view { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+        .view.active { display: flex; }
+
+        /* Input view */
+        .input-label {
+            font-size: 9px; color: var(--gray);
+            text-transform: uppercase; letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .spotify-input {
+            width: 100%; padding: 8px 10px;
+            border: 2px solid var(--sage);
+            border-radius: 6px;
+            background: white;
+            font-family: inherit;
+            font-size: 11px;
+            color: var(--charcoal);
+            outline: none;
+        }
+        .spotify-input:focus { border-color: var(--dark-green); }
+        .spotify-input::placeholder { color: #aaa; }
+
+        .hint {
+            font-size: 9px; color: var(--gray-light);
+            text-align: center; margin-top: 12px;
+            line-height: 1.4;
+        }
+
+        .hint b { color: var(--dark-green); }
+
+        /* Status */
+        .status {
+            font-size: 10px; text-align: center;
+            margin: 8px 0; min-height: 14px;
+            color: var(--gray-light);
+        }
+        .status.error { color: #c44; }
+        .status.success { color: var(--dark-green); }
+
+        /* Loading view */
+        .loading-art {
+            width: 100px; height: 100px;
+            margin: 10px auto;
+            border-radius: 6px;
+            background: var(--sage);
+            overflow: hidden;
+        }
+        .loading-art img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        .loading-info {
+            text-align: center;
+            margin: 8px 0;
+        }
+        .loading-info .album-name {
+            font-size: 12px; font-weight: bold;
+            color: var(--charcoal);
+        }
+        .loading-info .artist-name {
+            font-size: 10px; color: var(--gray);
+            margin-top: 2px;
+        }
+        .progress-bar {
+            width: 100%; height: 4px;
+            background: var(--sage);
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; width: 0%;
+            background: var(--dark-green);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        .loading-status {
+            font-size: 9px; color: var(--gray-light);
+            text-align: center; margin-top: 6px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulsing { animation: pulse 1.5s ease-in-out infinite; }
+
+        /* Results view */
+        .results-header {
+            display: flex; align-items: center;
+            gap: 10px; margin-bottom: 8px;
+        }
+        .results-cover {
+            width: 50px; height: 50px;
+            border-radius: 4px;
+            background: var(--sage);
+            overflow: hidden; flex-shrink: 0;
+        }
+        .results-cover img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        .results-meta .rm-album {
+            font-size: 11px; font-weight: bold;
+            color: var(--charcoal);
+        }
+        .results-meta .rm-artist {
+            font-size: 9px; color: var(--gray);
+        }
+        .results-meta .rm-count {
+            font-size: 9px; color: var(--dark-green);
+            margin-top: 2px;
+        }
+
+        .file-list {
+            flex: 1; overflow-y: auto;
+        }
+        .file-list::-webkit-scrollbar { width: 4px; }
+        .file-list::-webkit-scrollbar-thumb {
+            background: var(--sage); border-radius: 2px;
+        }
+
+        .file-item {
+            display: flex; justify-content: space-between;
+            align-items: center; padding: 6px 8px;
+            margin-bottom: 3px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid var(--sage);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .file-item:hover, .file-item.selected {
+            background: var(--sage);
+        }
+        .file-item .fname {
+            font-size: 10px; color: var(--charcoal);
+            flex: 1; overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 6px;
+        }
+        .file-item .fsize {
+            font-size: 8px; color: var(--gray-light);
+            white-space: nowrap;
+        }
+        .file-item .ficon {
+            margin-left: 6px; font-size: 10px;
+            color: var(--lavender);
+        }
+        .file-item.cover-item .ficon { color: var(--dark-green); }
+
+        /* Click wheel */
+        .click-wheel {
+            width: 200px; height: 200px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #3a3a3a, #1a1a1a);
+            margin: 0 auto;
+            position: relative;
+            box-shadow:
+                inset 0 2px 4px rgba(255,255,255,0.1),
+                0 4px 12px rgba(0,0,0,0.4);
+            user-select: none;
+        }
+
+        .center-btn {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px; height: 70px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #3a3a3a, #252525);
+            border: none; cursor: pointer;
+            box-shadow:
+                inset 0 1px 2px rgba(255,255,255,0.1),
+                0 2px 6px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+            color: #777; font-size: 10px;
+            font-family: inherit;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .center-btn:active {
+            transform: translate(-50%, -50%) scale(0.95);
+        }
+
+        .wheel-label {
+            position: absolute;
+            color: #666; font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .wheel-label.top { top: 14px; left: 50%; transform: translateX(-50%); }
+        .wheel-label.bottom { bottom: 14px; left: 50%; transform: translateX(-50%); }
+        .wheel-label.left { left: 14px; top: 50%; transform: translateY(-50%); }
+        .wheel-label.right { right: 14px; top: 50%; transform: translateY(-50%); }
+
+        .wheel-btn {
+            position: absolute;
+            width: 55px; height: 45px;
+            background: transparent;
+            border: none; cursor: pointer; z-index: 2;
+        }
+        .wheel-btn.top { top: 0; left: 50%; transform: translateX(-50%); }
+        .wheel-btn.bottom { bottom: 0; left: 50%; transform: translateX(-50%); }
+        .wheel-btn.left { left: 0; top: 50%; transform: translateY(-50%); }
+        .wheel-btn.right { right: 0; top: 50%; transform: translateY(-50%); }
+
+        .branding {
+            text-align: center; margin-top: 8px;
+            font-size: 8px; color: #888;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="ipod">
+        <div class="screen">
+            <div class="screen-header">
+                <span>Spotify Hijack</span>
+                <div class="battery-icon"><div class="battery-fill"></div></div>
+            </div>
+            <div class="screen-content">
+                <div class="title-bar" id="titleBar">Spotify Hijack</div>
+
+                <!-- INPUT VIEW -->
+                <div class="view active" id="inputView">
+                    <div class="input-label">Spotify URL</div>
+                    <input type="text" class="spotify-input" id="spotifyUrl"
+                        placeholder="https://open.spotify.com/track/..." />
+                    <div class="status" id="status"></div>
+                    <div class="hint">
+                        Klistra in en <b>track</b>, <b>album</b> eller <b>playlist</b>-lank.<br>
+                        Tryck pa mittknappen for att starta.
+                    </div>
+                </div>
+
+                <!-- LOADING VIEW -->
+                <div class="view" id="loadingView">
+                    <div class="loading-art" id="loadingArt"></div>
+                    <div class="loading-info">
+                        <div class="album-name pulsing" id="loadingAlbum">Laddar ner...</div>
+                        <div class="artist-name" id="loadingArtist"></div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="loading-status" id="loadingStatus">Soker pa YouTube...</div>
+                </div>
+
+                <!-- RESULTS VIEW -->
+                <div class="view" id="resultsView">
+                    <div class="results-header">
+                        <div class="results-cover" id="resultsCover"></div>
+                        <div class="results-meta">
+                            <div class="rm-album" id="rmAlbum"></div>
+                            <div class="rm-artist" id="rmArtist"></div>
+                            <div class="rm-count" id="rmCount"></div>
+                        </div>
+                    </div>
+                    <div class="file-list" id="fileList"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="click-wheel">
+            <span class="wheel-label top">MENU</span>
+            <span class="wheel-label bottom">&#9654;||</span>
+            <span class="wheel-label left">&#9664;&#9664;</span>
+            <span class="wheel-label right">&#9654;&#9654;</span>
+
+            <button class="wheel-btn top" onclick="goBack()"></button>
+            <button class="wheel-btn bottom" onclick="downloadSelected()"></button>
+            <button class="wheel-btn left" onclick="navigateUp()"></button>
+            <button class="wheel-btn right" onclick="navigateDown()"></button>
+
+            <button class="center-btn" onclick="selectAction()">OK</button>
+        </div>
+        <div class="branding">spotify hijack</div>
+    </div>
+
+    <script>
+        const views = {
+            input: document.getElementById('inputView'),
+            loading: document.getElementById('loadingView'),
+            results: document.getElementById('resultsView'),
+        };
+        const titleBar = document.getElementById('titleBar');
+        const urlInput = document.getElementById('spotifyUrl');
+        const statusEl = document.getElementById('status');
+
+        let currentView = 'input';
+        let currentFiles = [];
+        let selectedIndex = 0;
+        let albumInfo = {};
+
+        function showView(name) {
+            Object.values(views).forEach(v => v.classList.remove('active'));
+            views[name].classList.add('active');
+            currentView = name;
+        }
+
+        function setStatus(msg, type = '') {
+            statusEl.textContent = msg;
+            statusEl.className = 'status ' + type;
+        }
+
+        function goBack() {
+            if (currentView === 'results' || currentView === 'loading') {
+                showView('input');
+                titleBar.textContent = 'Spotify Hijack';
+                setStatus('');
+            }
+        }
+
+        function navigateUp() {
+            if (currentView === 'results' && currentFiles.length > 0) {
+                selectedIndex = Math.max(0, selectedIndex - 1);
+                renderFiles();
+                scrollToSelected();
+            }
+        }
+
+        function navigateDown() {
+            if (currentView === 'results' && currentFiles.length > 0) {
+                selectedIndex = Math.min(currentFiles.length - 1, selectedIndex + 1);
+                renderFiles();
+                scrollToSelected();
+            }
+        }
+
+        function scrollToSelected() {
+            const items = document.querySelectorAll('.file-item');
+            if (items[selectedIndex]) {
+                items[selectedIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        function downloadSelected() {
+            if (currentView === 'results' && currentFiles[selectedIndex]) {
+                triggerDownload(currentFiles[selectedIndex].path);
+            }
+        }
+
+        function triggerDownload(path) {
+            const a = document.createElement('a');
+            a.href = path;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        function selectAction() {
+            if (currentView === 'input') {
+                startDownload();
+            } else if (currentView === 'results') {
+                downloadSelected();
+            }
+        }
+
+        function renderFiles() {
+            const list = document.getElementById('fileList');
+            list.innerHTML = '';
+            currentFiles.forEach((f, i) => {
+                const div = document.createElement('div');
+                div.className = 'file-item' + (i === selectedIndex ? ' selected' : '') +
+                    (f.type === 'cover' ? ' cover-item' : '');
+                const icon = f.type === 'cover' ? '&#128247;' : '&#9835;';
+                const status = f.status === 'loading' ? '...' : (f.status === 'ready' ? '&#8681;' : '&#10005;');
+                div.innerHTML = `
+                    <span class="fname">${f.name}</span>
+                    <span class="ficon">${icon}</span>
+                    <span class="ficon">${status}</span>
+                `;
+                div.onclick = () => {
+                    if (f.audio_url) window.open(f.audio_url, '_blank');
+                    else if (f.cover_url) window.open(f.cover_url, '_blank');
+                };
+                list.appendChild(div);
+            });
+        }
+
+        async function fetchYouTubeUrl(track, index) {
+            try {
+                const res = await fetch('/api/youtube', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: track.search })
+                });
+                const data = await res.json();
+                if (data.audio_url) {
+                    currentFiles[index].audio_url = data.audio_url;
+                    currentFiles[index].webpage_url = data.webpage_url;
+                    currentFiles[index].status = 'ready';
+                } else {
+                    currentFiles[index].status = 'error';
+                }
+            } catch {
+                currentFiles[index].status = 'error';
+            }
+            renderFiles();
+        }
+
+        async function startDownload() {
+            const url = urlInput.value.trim();
+            if (!url) { setStatus('Klistra in en lank forst', 'error'); return; }
+            if (!url.match(/https?:\/\/open\.spotify\.com\/(track|album|playlist)\//)) {
+                setStatus('Ogiltig Spotify-lank', 'error');
+                return;
+            }
+
+            showView('loading');
+            titleBar.textContent = 'Laddar ner...';
+            document.getElementById('loadingAlbum').textContent = 'Hamtar info...';
+            document.getElementById('loadingArtist').textContent = '';
+            document.getElementById('loadingArt').innerHTML = '';
+            document.getElementById('loadingStatus').textContent = 'Hamtar info fran Spotify...';
+
+            const pf = document.getElementById('progressFill');
+            pf.style.width = '10%';
+
+            try {
+                const res = await fetch('/api/info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    setStatus(data.error, 'error');
+                    titleBar.textContent = 'Fel';
+                    showView('input');
+                    return;
+                }
+
+                const tracks = data.tracks || [];
+                albumInfo = data.info || {};
+                currentFiles = [];
+                selectedIndex = 0;
+
+                if (albumInfo.cover_url) {
+                    currentFiles.push({
+                        name: 'Album Cover',
+                        type: 'cover',
+                        cover_url: albumInfo.cover_url,
+                        status: 'ready'
+                    });
+                }
+
+                tracks.forEach(t => {
+                    currentFiles.push({
+                        name: `${t.artist} - ${t.name}`,
+                        type: 'audio',
+                        search: t.search,
+                        status: 'loading',
+                        audio_url: null
+                    });
+                });
+
+                pf.style.width = '40%';
+                document.getElementById('loadingAlbum').textContent = albumInfo.album || '';
+                document.getElementById('loadingArtist').textContent = albumInfo.artist || '';
+                if (albumInfo.cover_url) {
+                    document.getElementById('loadingArt').innerHTML =
+                        `<img src="${albumInfo.cover_url}" alt="cover">`;
+                }
+                document.getElementById('loadingStatus').textContent =
+                    `Soker ${tracks.length} lat(ar) pa YouTube...`;
+
+                document.getElementById('rmAlbum').textContent = albumInfo.album || 'Okand';
+                document.getElementById('rmArtist').textContent = albumInfo.artist || '';
+                document.getElementById('rmCount').textContent = tracks.length + ' lat(ar)';
+
+                const coverEl = document.getElementById('resultsCover');
+                if (albumInfo.cover_url) {
+                    coverEl.innerHTML = `<img src="${albumInfo.cover_url}" alt="cover">`;
+                }
+
+                renderFiles();
+                showView('results');
+                titleBar.textContent = albumInfo.album || 'Resultat';
+
+                const audioFiles = currentFiles.filter(f => f.type === 'audio');
+                for (let i = 0; i < audioFiles.length; i++) {
+                    const idx = currentFiles.indexOf(audioFiles[i]);
+                    await fetchYouTubeUrl(tracks[i], idx);
+                    pf.style.width = (40 + (60 * (i + 1) / audioFiles.length)) + '%';
+                }
+
+            } catch (e) {
+                setStatus('Nagonting gick fel: ' + e.message, 'error');
+                showView('input');
+                titleBar.textContent = 'Fel';
+            }
+        }
+
+        urlInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') startDownload();
+        });
+    </script>
+</body>
+</html>
