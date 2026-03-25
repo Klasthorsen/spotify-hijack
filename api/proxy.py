@@ -1,28 +1,11 @@
 from http.server import BaseHTTPRequestHandler
-import json
-import urllib.request
+import os
 import urllib.parse
 import yt_dlp
+import uuid
 
 
-def extract_audio_url(query):
-    ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "default_search": "ytsearch1",
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-        if not info or "entries" not in info or not info["entries"]:
-            return None, None
-        entry = info["entries"][0]
-        # Prefer audio-only format
-        for fmt in sorted(entry.get("formats", []), key=lambda f: f.get("abr", 0) or 0, reverse=True):
-            if fmt.get("acodec") != "none" and fmt.get("vcodec") in ("none", None):
-                return fmt.get("url"), entry.get("title", "audio")
-        return entry.get("url"), entry.get("title", "audio")
+TMP = "/tmp"
 
 
 class handler(BaseHTTPRequestHandler):
@@ -36,36 +19,67 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(b"Missing ?q= parameter")
             return
 
-        try:
-            audio_url, title = extract_audio_url(query)
-            if not audio_url:
-                self.send_response(404)
-                self.end_headers()
-                self.wfile.write(b"Not found")
-                return
+        job_id = uuid.uuid4().hex[:8]
+        out_template = os.path.join(TMP, f"{job_id}.%(ext)s")
+        out_mp3 = os.path.join(TMP, f"{job_id}.mp3")
 
-            req = urllib.request.Request(audio_url, headers={"User-Agent": "Mozilla/5.0"})
-            resp = urllib.request.urlopen(req, timeout=30)
+        try:
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+                "default_search": "ytsearch1",
+                "outtmpl": out_template,
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }],
+            }
+
+            title = "audio"
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(f"ytsearch1:{query}", download=True)
+                if info and "entries" in info and info["entries"]:
+                    title = info["entries"][0].get("title", "audio")
+
+            if not os.path.exists(out_mp3):
+                candidates = [f for f in os.listdir(TMP) if f.startswith(job_id)]
+                if candidates:
+                    out_mp3 = os.path.join(TMP, candidates[0])
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Download failed")
+                    return
 
             safe_title = "".join(c for c in title if c.isalnum() or c in " -_")[:80]
-            content_type = resp.headers.get("Content-Type", "audio/mp4")
+            file_size = os.path.getsize(out_mp3)
 
             self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Disposition", f'attachment; filename="{safe_title}.m4a"')
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", str(file_size))
+            self.send_header("Content-Disposition", f'attachment; filename="{safe_title}.mp3"')
             self.send_header("Access-Control-Allow-Origin", "*")
-            if resp.headers.get("Content-Length"):
-                self.send_header("Content-Length", resp.headers.get("Content-Length"))
             self.end_headers()
 
-            while True:
-                chunk = resp.read(65536)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
+            with open(out_mp3, "rb") as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
 
         except Exception as e:
             self.send_response(500)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             self.wfile.write(str(e).encode())
+        finally:
+            for f in os.listdir(TMP):
+                if f.startswith(job_id):
+                    try:
+                        os.remove(os.path.join(TMP, f))
+                    except:
+                        pass
