@@ -1,3 +1,4 @@
+from http.server import BaseHTTPRequestHandler
 import os
 import re
 import json
@@ -63,45 +64,46 @@ def get_tracks(url):
     return tracks
 
 
-def handler(request):
-    if request.method == "OPTIONS":
-        return {"statusCode": 200, "body": ""}
+class handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length)
 
-    try:
-        body = json.loads(request.body)
-    except Exception:
-        return {
-            "statusCode": 400,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"error": "Ogiltig request"})
-        }
+        try:
+            data = json.loads(body)
+        except Exception:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Ogiltig request"}).encode())
+            return
 
-    url = body.get("url", "").strip()
-    if not url or not re.match(r"https?://open\.spotify\.com/(track|album|playlist)/[a-zA-Z0-9]+", url):
-        return {
-            "statusCode": 400,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"error": "Ogiltig Spotify-lank"})
-        }
+        url = data.get("url", "").strip()
+        if not url or not re.match(r"https?://open\.spotify\.com/(track|album|playlist)/[a-zA-Z0-9]+", url):
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Ogiltig Spotify-lank"}).encode())
+            return
 
-    try:
-        tracks = get_tracks(url)
-        album_info = {}
-        if tracks:
-            album_info = {
-                "album": tracks[0]["album"],
-                "artist": tracks[0]["artist"],
-                "cover_url": tracks[0].get("cover")
-            }
+        try:
+            tracks = get_tracks(url)
+            album_info = {}
+            if tracks:
+                album_info = {
+                    "album": tracks[0]["album"],
+                    "artist": tracks[0]["artist"],
+                    "cover_url": tracks[0].get("cover")
+                }
 
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"tracks": tracks, "count": len(tracks), "info": album_info})
-        }
-    except Exception as e:
-        return {
-            "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"error": str(e)})
-        }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "tracks": tracks, "count": len(tracks), "info": album_info
+            }).encode())
+        except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
