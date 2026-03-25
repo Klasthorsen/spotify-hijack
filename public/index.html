@@ -516,12 +516,8 @@
 
         function updateDownloadAllBtn() {
             const btn = document.getElementById('downloadAllBtn');
-            const readyCount = currentFiles.filter(f => f.status === 'ready').length;
-            const allReady = readyCount === currentFiles.length && readyCount > 0;
-            btn.disabled = !allReady;
-            btn.textContent = allReady
-                ? '\u2913 Ladda ner alla (' + readyCount + ')'
-                : '\u2913 Laddar... (' + readyCount + '/' + currentFiles.length + ')';
+            btn.disabled = currentFiles.length === 0;
+            btn.textContent = '\u2913 Ladda ner alla (' + currentFiles.length + ')';
         }
 
         async function downloadAll() {
@@ -577,27 +573,6 @@
             }
         }
 
-        async function fetchYouTubeUrl(track, index) {
-            try {
-                const res = await fetch('/api/youtube', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: track.search })
-                });
-                const data = await res.json();
-                if (data.audio_url) {
-                    currentFiles[index].audio_url = data.audio_url;
-                    currentFiles[index].webpage_url = data.webpage_url;
-                    currentFiles[index].status = 'ready';
-                } else {
-                    currentFiles[index].status = 'error';
-                }
-            } catch {
-                currentFiles[index].status = 'error';
-            }
-            renderFiles();
-        }
-
         async function startDownload() {
             const url = urlInput.value.trim();
             if (!url) { setStatus('Klistra in en lank forst', 'error'); return; }
@@ -612,9 +587,7 @@
             document.getElementById('loadingArtist').textContent = '';
             document.getElementById('loadingArt').innerHTML = '';
             document.getElementById('loadingStatus').textContent = 'Hamtar info fran Spotify...';
-
-            const pf = document.getElementById('progressFill');
-            pf.style.width = '10%';
+            document.getElementById('progressFill').style.width = '30%';
 
             try {
                 const res = await fetch('/api/info', {
@@ -650,20 +623,9 @@
                         name: `${t.artist} - ${t.name}`,
                         type: 'audio',
                         search: t.search,
-                        status: 'loading',
-                        audio_url: null
+                        status: 'ready'
                     });
                 });
-
-                pf.style.width = '40%';
-                document.getElementById('loadingAlbum').textContent = albumInfo.album || '';
-                document.getElementById('loadingArtist').textContent = albumInfo.artist || '';
-                if (albumInfo.cover_url) {
-                    document.getElementById('loadingArt').innerHTML =
-                        `<img src="${albumInfo.cover_url}" alt="cover">`;
-                }
-                document.getElementById('loadingStatus').textContent =
-                    `Soker ${tracks.length} lat(ar) pa YouTube...`;
 
                 document.getElementById('rmAlbum').textContent = albumInfo.album || 'Okand';
                 document.getElementById('rmArtist').textContent = albumInfo.artist || '';
@@ -674,16 +636,10 @@
                     coverEl.innerHTML = `<img src="${albumInfo.cover_url}" alt="cover">`;
                 }
 
+                document.getElementById('progressFill').style.width = '100%';
                 renderFiles();
                 showView('results');
                 titleBar.textContent = albumInfo.album || 'Resultat';
-
-                const audioFiles = currentFiles.filter(f => f.type === 'audio');
-                for (let i = 0; i < audioFiles.length; i++) {
-                    const idx = currentFiles.indexOf(audioFiles[i]);
-                    await fetchYouTubeUrl(tracks[i], idx);
-                    pf.style.width = (40 + (60 * (i + 1) / audioFiles.length)) + '%';
-                }
 
             } catch (e) {
                 setStatus('Nagonting gick fel: ' + e.message, 'error');
