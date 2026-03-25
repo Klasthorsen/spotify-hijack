@@ -500,8 +500,11 @@
                     <span class="ficon">${status}</span>
                 `;
                 div.onclick = () => {
-                    if (f.audio_url) window.open(f.audio_url, '_blank');
-                    else if (f.cover_url) window.open(f.cover_url, '_blank');
+                    if (f.type === 'cover' && f.cover_url) {
+                        window.open(f.cover_url, '_blank');
+                    } else if (f.type === 'audio' && f.search) {
+                        window.open('/api/proxy?q=' + encodeURIComponent(f.search), '_blank');
+                    }
                 };
                 list.appendChild(div);
             });
@@ -528,15 +531,24 @@
                 const folderName = (albumInfo.artist || 'Unknown') + ' - ' + (albumInfo.album || 'Unknown');
                 const folder = zip.folder(folderName);
 
-                const fetches = currentFiles.filter(f => f.status === 'ready').map(async (f) => {
+                const readyFiles = currentFiles.filter(f => f.status === 'ready');
+                let done = 0;
+                const fetches = readyFiles.map(async (f) => {
                     try {
-                        const url = f.audio_url || f.cover_url;
+                        let url, name;
+                        if (f.type === 'cover') {
+                            url = f.cover_url;
+                            name = 'cover.jpg';
+                        } else {
+                            url = '/api/proxy?q=' + encodeURIComponent(f.search);
+                            name = f.name + '.m4a';
+                        }
                         if (!url) return;
                         const res = await fetch(url);
                         const blob = await res.blob();
-                        const ext = f.type === 'cover' ? '.jpg' : '';
-                        const name = f.type === 'cover' ? 'cover.jpg' : f.name + ext;
                         folder.file(name, blob);
+                        done++;
+                        btn.textContent = `Packar... (${done}/${readyFiles.length})`;
                     } catch (e) {
                         console.error('Failed to fetch:', f.name, e);
                     }
